@@ -1,0 +1,42 @@
+# === Core AI ===
+openai
+faster-whisper           # แทน openai-whisper
+sentence-transformers
+torch                    # ติดตั้งจาก wheel เฉพาะ Pi (ดูหมายเหตุด้านล่าง)
+google-cloud-texttospeech
+rapidfuzz
+resemblyzer
+
+# === Voice I/O ===
+pyttsx3
+sounddevice
+soundfile
+pydub
+ffmpeg-python
+scipy
+SpeechRecognition
+webrtcvad
+pyaudio
+pydub
+
+# === Memory & Planning ===
+tinydb
+chromadb
+
+# === Web/API ===
+fastapi
+uvicorn[standard]
+
+# === Utility ===
+numpy
+tqdm
+requests
+platformdirs
+python-dotenv
+pydantic-settings
+
+# === Raspberry Pi Hardware ===
+# RPi.GPIO
+
+# === Logging (optional)
+loguru
