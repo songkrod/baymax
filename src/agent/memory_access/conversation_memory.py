@@ -23,25 +23,36 @@ def save_conversations(data):
     except Exception as e:
         logger.error(f"[❌] เกิดข้อผิดพลาดในการบันทึกบทสนทนา: {e}")
 
-def add_conversation(messages: List[Dict], final_intent: Optional[Dict] = None):
+def add_conversation(messages: List[Dict], user_id: str, final_intent: Optional[Dict] = None):
     """
     เพิ่มบทสนทนาใหม่ลงในประวัติ
     
     Args:
         messages (List[Dict]): รายการข้อความในบทสนทนา
+        user_id (str): รหัสผู้ใช้
         final_intent (Optional[Dict]): intent สุดท้ายที่วิเคราะห์ได้
     """
+    if not messages or not isinstance(messages, list):
+        logger.warning("[⚠️] ไม่สามารถบันทึกบทสนทนาได้: ข้อมูล messages ไม่ถูกต้อง")
+        return
+        
     conversation_data = {
-        "start_time": messages[0]["timestamp"] if messages else datetime.now().isoformat(),
+        "user_id": user_id,
+        "start_time": messages[0].get("timestamp", datetime.now().isoformat()) if messages else datetime.now().isoformat(),
         "end_time": datetime.now().isoformat(),
         "messages": messages,
-        "final_intent": final_intent
+        "final_intent": final_intent if isinstance(final_intent, dict) else None
     }
     
-    conversations = load_conversations()
-    conversations.append(conversation_data)
-    save_conversations(conversations)
-    logger.info(f"[💾] บันทึกบทสนทนาเรียบร้อย")
+    try:
+        conversations = load_conversations()
+        if not isinstance(conversations, list):
+            conversations = []
+        conversations.append(conversation_data)
+        save_conversations(conversations)
+        logger.info(f"[💾] บันทึกบทสนทนาเรียบร้อย")
+    except Exception as e:
+        logger.error(f"[❌] เกิดข้อผิดพลาดในการบันทึกบทสนทนา: {e}")
 
 def get_conversation_history(messages: List[Dict]) -> str:
     """
@@ -58,15 +69,22 @@ def get_conversation_history(messages: List[Dict]) -> str:
         for msg in messages
     ])
 
-def list_conversations() -> List[Dict]:
+def list_conversations(user_id: Optional[str] = None) -> List[Dict]:
     """
     แสดงรายการบทสนทนาทั้งหมดที่บันทึกไว้
+    
+    Args:
+        user_id (Optional[str]): ถ้าระบุจะแสดงเฉพาะบทสนทนาของผู้ใช้คนนั้น
     
     Returns:
         List[Dict]: รายการบทสนทนาพร้อมข้อมูลสรุป
     """
     conversations = load_conversations()
+    if user_id:
+        conversations = [conv for conv in conversations if conv.get("user_id") == user_id]
+        
     return [{
+        "user_id": conv.get("user_id"),
         "start_time": conv["start_time"],
         "end_time": conv["end_time"],
         "message_count": len(conv["messages"]),

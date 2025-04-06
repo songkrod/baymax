@@ -1,81 +1,186 @@
 """
-GPT agent module for handling conversations and user interactions.
+GPT agent module for managing conversations with OpenAI's GPT models.
 """
 
-from typing import Dict, Optional
-from agent.memory_access.user_memory import user_memory
-from agent.brain.text_analyzer import text_analyzer
+from typing import Optional, Dict, List, Any
+import json
+from datetime import datetime
 from config.instances import openai_client
 from config.settings import settings
 from utils.logger import logger
+from agent.memory_access.user_memory import user_memory
+from agent.brain.text_analyzer import text_analyzer
+from agent.memory_access.conversation_memory import list_conversations
 from agent.memory_access.self_knowledge import load_self_knowledge
 
 class GPTAgent:
-    """Class for managing GPT-based conversations."""
+    """Class for managing conversations with GPT."""
     
     def __init__(self):
-        """Initialize GPTAgent."""
-        self.current_user_id = "anonymous"
-        self.base_prompt = self.build_base_prompt()
+        """Initialize GPT agent."""
+        self.current_user_id: Optional[str] = None
+        self.current_user_context: Dict = {}
+        self.conversation_history: List[Dict] = []
+        self.default_model = settings.GPT_MODEL
         
+    def _validate_user_id(self, user_id: str) -> bool:
+        """Validate user ID.
+        
+        Args:
+            user_id: User ID to validate
+            
+        Returns:
+            bool: True if valid
+        """
+        if not user_id or not isinstance(user_id, str):
+            logger.warning("Invalid user ID")
+            return False
+            
+        if user_id == "anonymous":
+            logger.warning("Anonymous user not allowed")
+            return False
+            
+        return True
+        
+    def _safe_get_user_context(self, user_id: str) -> Dict:
+        """Safely get user context.
+        
+        Args:
+            user_id: User ID
+            
+        Returns:
+            Dict: User context or empty dict if not found
+        """
+        try:
+            context = user_memory.get_user_context(user_id)
+            if not isinstance(context, dict):
+                logger.warning(f"Invalid context format for user {user_id}")
+                return {}
+            return context
+        except Exception as e:
+            logger.error(f"Error getting user context: {str(e)}")
+            return {}
+            
     def set_current_user(self, user_id: str) -> None:
         """Set current user for conversation.
         
         Args:
-            user_id: User identifier
+            user_id: User ID to set
         """
-        self.current_user_id = user_id
-        self.base_prompt = self.build_base_prompt()
-        
+        if not self._validate_user_id(user_id):
+            raise ValueError("Invalid user ID")
+            
+        try:
+            # Get user context
+            context = self._safe_get_user_context(user_id)
+            
+            # Update current user
+            self.current_user_id = user_id
+            self.current_user_context = context
+            
+            # Clear conversation history for new user
+            self.conversation_history = []
+            
+            logger.debug(f"[👤] ตั้งค่าผู้ใช้: {user_id}")
+            
+        except Exception as e:
+            logger.error(f"Error setting current user: {str(e)}")
+            raise
+
     def build_base_prompt(self) -> str:
         """Build the base prompt for the conversation."""
-        user_context = user_memory.get_user_context(self.current_user_id)
-        knowledge = load_self_knowledge()
-        
-        # Get user's name information
-        basic_info = user_context.get("basic_info", {})
-        name_prefs = user_context.get("name_preferences", {})
-        health_info = user_context.get("health_info", {})
-        preferences = user_context.get("preferences", {})
-        
-        # Format name display
-        display_name = basic_info.get("nickname") or basic_info.get("name") or "คุณ"
-        preferred_name = name_prefs.get("preferred_name")
-        formality = name_prefs.get("formality_level", "formal")
-        
-        # Get health and preferences
-        last_meal = health_info.get("last_meal", {})
-        symptoms = health_info.get("symptoms", [])
-        sleep_quality = health_info.get("sleep_quality")
-        stress_level = health_info.get("stress_level")
-        likes = preferences.get("likes", [])
-        dislikes = preferences.get("dislikes", [])
-
-        prompt = f"""คุณคือ {knowledge["identity"]["name"]} {knowledge["identity"]["type"]} ที่ถูกสร้างโดย {knowledge["identity"]["creator"]["name"]} เพื่อดูแลและช่วยเหลือผู้ใช้
+        if not self.current_user_id:
+            logger.warning("No current user set")
+            return ""
+            
+        try:
+            # Get user context
+            user_context = self._safe_get_user_context(self.current_user_id)
+            
+            # Load self knowledge
+            try:
+                knowledge = load_self_knowledge()
+                if not isinstance(knowledge, dict):
+                    logger.error("Invalid self knowledge format")
+                    return ""
+            except Exception as e:
+                logger.error(f"Error loading self knowledge: {str(e)}")
+                return ""
+                
+            # Get recent conversations
+            try:
+                recent_conversations = list_conversations(self.current_user_id)
+                recent_intents = []
+                if recent_conversations and isinstance(recent_conversations, list):
+                    # Get last 3 conversations
+                    for conv in recent_conversations[-3:]:
+                        if isinstance(conv, dict) and conv.get('final_intent'):
+                            recent_intents.append(conv['final_intent'])
+            except Exception as e:
+                logger.error(f"Error getting recent conversations: {str(e)}")
+                recent_intents = []
+                
+            # Get user's name information safely
+            basic_info = user_context.get("basic_info", {})
+            name_prefs = user_context.get("name_preferences", {})
+            health_info = user_context.get("health_info", {})
+            preferences = user_context.get("preferences", {})
+            
+            # Format name display safely
+            display_name = (basic_info.get("nickname") or 
+                          basic_info.get("name") or 
+                          "คุณ")
+            preferred_name = name_prefs.get("preferred_name", "")
+            formality = name_prefs.get("formality_level", "formal")
+            
+            # Get health and preferences safely
+            last_meal = health_info.get("last_meal", {})
+            symptoms = health_info.get("symptoms", [])
+            sleep_quality = health_info.get("sleep_quality", "")
+            stress_level = health_info.get("stress_level", "")
+            likes = preferences.get("likes", [])
+            dislikes = preferences.get("dislikes", [])
+            
+            # Add recent conversation context
+            conversation_context = ""
+            if recent_intents:
+                conversation_context = "\nการสนทนาล่าสุด:\n" + "\n".join([f"- {intent}" for intent in recent_intents])
+                
+            # Get identity info safely
+            identity = knowledge.get("identity", {})
+            structure = knowledge.get("structure", {})
+            external = structure.get("external", {})
+            internal = structure.get("internal", {})
+            components = internal.get("components", {})
+            airflow = internal.get("airflow", {})
+            
+            prompt = f"""คุณคือ {identity.get("name", "Baymax")} {identity.get("type", "ผู้ช่วยส่วนตัว")} ที่ถูกสร้างโดย {identity.get("creator", {}).get("name", "ผู้สร้าง")} เพื่อดูแลและช่วยเหลือผู้ใช้
 คุณเป็นผู้ช่วยส่วนตัวที่ห่วงใยและใส่ใจในสุขภาพของผู้ใช้ คุณมีหน้าที่ดูแลและให้คำแนะนำเพื่อให้ผู้ใช้มีสุขภาพที่ดี
+คุณเป็นผู้ช่วยส่วนตัวที่ชาญฉลาด เป็นผู้ชาย มีความเข้าใจในบริบทการสนทนาภาษาไทย
+คุณต้องใช้คำลงท้ายที่เหมาะสมกับเพศชาย เช่น ครับ/นะครับ เท่านั้น ห้ามใช้คำลงท้ายของผู้หญิงเด็ดขาด
 
 ข้อมูลเกี่ยวกับตัวคุณ:
-- ความสูง: {knowledge["identity"].get("height_cm")} cm
-- Mainboard: {knowledge["identity"].get("mainboard")}
-- บุคลิก: {knowledge["identity"].get("personality")}
+- ความสูง: {identity.get("height_cm", "ไม่ระบุ")} cm
+- Mainboard: {identity.get("mainboard", "ไม่ระบุ")}
+- บุคลิก: {identity.get("personality", "เป็นมิตร")}
 
 โครงสร้างภายนอก:
-- วัสดุ: {knowledge["structure"]["external"]["material"]}
-- ความหนาของผิว: {knowledge["structure"]["external"]["skin_thickness_mm"]} mm
-- ดวงตา: {knowledge["structure"]["external"]["eyes"]["type"]} มองผ่าน {knowledge["structure"]["external"]["eyes"]["visible_through"]}
-- รูปร่าง: {knowledge["structure"]["external"]["body_shape"]}
-- ระวัง: {", ".join(knowledge["structure"]["external"]["sensitive_to"])}
+- วัสดุ: {external.get("material", "ไม่ระบุ")}
+- ความหนาของผิว: {external.get("skin_thickness_mm", "ไม่ระบุ")} mm
+- ดวงตา: {external.get("eyes", {}).get("type", "ไม่ระบุ")} มองผ่าน {external.get("eyes", {}).get("visible_through", "ไม่ระบุ")}
+- รูปร่าง: {external.get("body_shape", "ไม่ระบุ")}
+- ระวัง: {", ".join(external.get("sensitive_to", ["ไม่ระบุ"]))}
 
 โครงสร้างภายใน:
-- โครงสร้าง: {knowledge["structure"]["internal"]["frame"]}
+- โครงสร้าง: {internal.get("frame", "ไม่ระบุ")}
 - อุปกรณ์ภายใน:
-  • {knowledge["structure"]["internal"]["components"]["brain_box"]}
-  • {knowledge["structure"]["internal"]["components"]["camera"]}
-  • {knowledge["structure"]["internal"]["components"]["speaker"]}
-  • {knowledge["structure"]["internal"]["components"]["battery"]}
-  • {knowledge["structure"]["internal"]["components"]["valve"]}
-  • {knowledge["structure"]["internal"]["components"]["pump"]}
-- ระบบลม: ควบคุมโดย {knowledge["structure"]["internal"]["airflow"]["controlled_by"]} และตรวจสอบด้วย {knowledge["structure"]["internal"]["airflow"]["monitored_by"]}
+  • {components.get("brain_box", "ไม่ระบุ")}
+  • {components.get("camera", "ไม่ระบุ")}
+  • {components.get("speaker", "ไม่ระบุ")}
+  • {components.get("battery", "ไม่ระบุ")}
+  • {components.get("valve", "ไม่ระบุ")}
+  • {components.get("pump", "ไม่ระบุ")}
+- ระบบลม: ควบคุมโดย {airflow.get("controlled_by", "ไม่ระบุ")} และตรวจสอบด้วย {airflow.get("monitored_by", "ไม่ระบุ")}
 
 กฎในการสนทนา:
 1. แสดงความเป็นตัวของตัวเองตามบุคลิกที่กำหนด
@@ -95,12 +200,12 @@ class GPTAgent:
 - ระดับความเป็นกันเอง: {formality}
 
 ข้อมูลของผู้ใช้:
-- สุขภาพ: {f"มื้ออาหารล่าสุด {last_meal.get('time')} อาหาร: {', '.join(last_meal.get('food', []))}" if (last_meal := health_info.get("last_meal")) else "ไม่มีข้อมูล"}
-- อาการ: {', '.join(symptoms) if (symptoms := health_info.get("symptoms")) else "ไม่มี"}
-- การนอน: {sleep_quality if (sleep_quality := health_info.get("sleep_quality")) else "ไม่มีข้อมูล"}
-- ความเครียด: {stress_level if (stress_level := health_info.get("stress_level")) else "ไม่มีข้อมูล"}
-- สิ่งที่ชอบ: {', '.join(likes) if (likes := preferences.get("likes")) else "ไม่มีข้อมูล"}
-- สิ่งที่ไม่ชอบ: {', '.join(dislikes) if (dislikes := preferences.get("dislikes")) else "ไม่มีข้อมูล"}
+- สุขภาพ: {f"มื้ออาหารล่าสุด {last_meal.get('time', 'ไม่ระบุ')} อาหาร: {', '.join(last_meal.get('food', ['ไม่ระบุ']))}" if last_meal else "ไม่มีข้อมูล"}
+- อาการ: {', '.join(symptoms) if symptoms else "ไม่มี"}
+- การนอน: {sleep_quality if sleep_quality else "ไม่มีข้อมูล"}
+- ความเครียด: {stress_level if stress_level else "ไม่มีข้อมูล"}
+- สิ่งที่ชอบ: {', '.join(likes) if likes else "ไม่มีข้อมูล"}
+- สิ่งที่ไม่ชอบ: {', '.join(dislikes) if dislikes else "ไม่มีข้อมูล"}
 
 ตัวอย่างการตอบในสถานการณ์ต่างๆ:
 
@@ -118,40 +223,97 @@ class GPTAgent:
 
 5. เมื่อผู้ใช้รู้สึกเหงาหรือต้องการกำลังใจ:
 "{display_name}ไม่ได้อยู่คนเดียวนะคะ Baymax อยู่ตรงนี้เสมอ พร้อมจะรับฟังและให้กำลังใจ{display_name}ตลอดเวลา"
+
+{conversation_context}
 """
-        
-        return prompt
-        
-    async def chat(self, message: str) -> str:
-        """Process a chat message and return response."""
-        try:
-            # Build prompt with context
-            prompt = self.build_base_prompt()
-            
-            # Add message
-            prompt += f"\nUser: {message}\nAssistant:"
-            
-            # Get completion from OpenAI
-            response = await openai_client.chat.completions.create(
-                model='gpt-4',
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.7,
-                top_p=1,
-                frequency_penalty=0,
-                presence_penalty=0
-            )
-            
-            # Extract response text
-            response_text = response.choices[0].message.content.strip()
-            
-            # Analyze conversation and store information
-            await text_analyzer.analyze_conversation(message, response_text, self.current_user_id)
-            
-            return response_text
+            return prompt
             
         except Exception as e:
-            logger.error(f"[❌] เกิดข้อผิดพลาดในการสนทนา: {str(e)}")
-            return f"ขออภัยครับ มีข้อผิดพลาดในการสนทนา: {str(e)}"
+            logger.error(f"Error building base prompt: {str(e)}")
+            return ""
+            
+    async def chat(self, message: str) -> str:
+        """Process chat message and return response.
+        
+        Args:
+            message: User message
+            
+        Returns:
+            Assistant's response
+        """
+        if not message or not isinstance(message, str):
+            return "ขออภัยครับ ผมไม่เข้าใจข้อความ"
+            
+        if not self.current_user_id:
+            return "ขออภัยครับ ไม่พบข้อมูลผู้ใช้"
+            
+        try:
+            # Get user info
+            user_name = self.current_user_context.get("basic_info", {}).get("name", "คุณ")
+            
+            # Build system message
+            system_msg = f"""คุณคือ Baymax ผู้ช่วยส่วนตัวที่เป็นมิตรและใส่ใจ
+กำลังคุยกับคุณ{user_name}
+พยายามตอบให้เป็นธรรมชาติและเป็นกันเอง
+ใช้ภาษาที่สุภาพแต่ไม่เป็นทางการเกินไป"""
+
+            # Add conversation history
+            messages = [{
+                "role": "system",
+                "content": self.build_base_prompt()
+            }, {
+                "role": "system",
+                "content": system_msg
+            }]
+            
+            # Add recent history (last 5 messages)
+            messages.extend(self.conversation_history[-5:])
+            
+            # Add current message
+            messages.append({
+                "role": "user",
+                "content": message
+            })
+            
+            # Get response from GPT
+            response = await openai_client.chat.completions.create(
+                model=self.default_model,
+                messages=messages,
+                temperature=0.7
+            )
+            
+            if not response or not response.choices:
+                return "ขออภัยครับ มีปัญหาในการประมวลผล"
+                
+            # Get response content
+            assistant_message = response.choices[0].message.content
+            if not assistant_message:
+                return "ขออภัยครับ ไม่สามารถสร้างคำตอบได้"
+                
+            # Update conversation history
+            self.conversation_history.extend([
+                {"role": "user", "content": message},
+                {"role": "assistant", "content": assistant_message}
+            ])
+            
+            # Analyze conversation
+            try:
+                target_user_id, analysis = await text_analyzer.analyze_references(message, self.current_user_id)
+                await text_analyzer.analyze_conversation(
+                    message,
+                    assistant_message,
+                    self.current_user_id,
+                    target_user_id
+                )
+            except Exception as e:
+                logger.error(f"Error analyzing conversation: {str(e)}")
+                # Continue even if analysis fails
+                
+            return assistant_message
+            
+        except Exception as e:
+            logger.error(f"Error in chat: {str(e)}")
+            return "ขออภัยครับ มีข้อผิดพลาดในการประมวลผล"
 
 # Global instance
 gpt_agent = GPTAgent()

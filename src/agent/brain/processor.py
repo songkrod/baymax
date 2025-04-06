@@ -3,7 +3,7 @@ from typing import Dict, List
 from agent.brain.gpt_agent import gpt_agent
 from skills.core.speech.speaker import say
 from utils.logger import logger
-from agent.memory_access.conversation_memory import get_conversation_history
+from agent.memory_access.conversation_memory import get_conversation_history, list_conversations
 from skills.core.listen.recognizer import voice_recognizer
 
 async def process_command(text: str) -> None:
@@ -92,3 +92,26 @@ async def analyze_conversation(messages: List[Dict]) -> Dict:
             "confidence": 0.0,
             "explanation": "ขออภัยครับ เกิดข้อผิดพลาดในการวิเคราะห์บทสนทนา"
         }
+
+async def get_user_conversation_history(user_id: str) -> str:
+    """Get conversation history for a user.
+    
+    Args:
+        user_id: User ID to get history for
+        
+    Returns:
+        Formatted conversation history
+    """
+    conversations = list_conversations(user_id)
+    if not conversations:
+        return "ไม่พบประวัติการสนทนา"
+        
+    history = []
+    for conv in conversations:
+        history.append(f"เวลา: {conv['start_time']}")
+        if conv.get('final_intent'):
+            history.append(f"Intent: {conv['final_intent']}")
+        history.append(f"จำนวนข้อความ: {conv['message_count']}")
+        history.append("---")
+        
+    return "\n".join(history)

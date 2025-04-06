@@ -2,7 +2,7 @@
 User memory management module for storing and retrieving user information.
 """
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 import json
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +13,7 @@ from config.settings import settings
 class UserMemory:
     """Class for managing user memories and preferences."""
     
-    def __init__(self, storage_dir: str = os.getenv("USERS_MEMORY_PATH", "data/memories/users")):
+    def __init__(self, storage_dir: str = settings.USERS_MEMORY_PATH):
         """Initialize UserMemory with storage directory."""
         self.storage_dir = Path(storage_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
@@ -38,7 +38,7 @@ class UserMemory:
                 return json.load(f)
         return {}
         
-    def update_memory(self, memory_type: str, data: Dict, user_id: Optional[str] = None) -> None:
+    def update_memory(self, memory_type: str, data: Union[Dict, List], user_id: Optional[str] = None) -> None:
         """Update user memory with new information.
         
         Args:
@@ -77,6 +77,18 @@ class UserMemory:
             elif isinstance(data, list):
                 current_aliases.update(data)
             memories["aliases"] = list(current_aliases)
+        elif memory_type == "basic_info" and "voice_samples" in data:
+            # Special handling for voice samples to ensure they're stored as a list
+            if "voice_samples" not in memories["basic_info"]:
+                memories["basic_info"]["voice_samples"] = []
+            if isinstance(data["voice_samples"], list):
+                memories["basic_info"]["voice_samples"] = data["voice_samples"]
+            else:
+                memories["basic_info"]["voice_samples"].append(data["voice_samples"])
+            # Update other basic info fields
+            for key, value in data.items():
+                if key != "voice_samples":
+                    memories["basic_info"][key] = value
         elif isinstance(data, dict):
             # For dict, update existing data
             if memory_type not in memories:

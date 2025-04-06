@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     GOOGLE_APPLICATION_CREDENTIALS: str = "secrets/gcloud_key.json"
     
+    # OpenAI
+    GPT_MODEL: str = "gpt-3.5-turbo"
+    
     # Whisper
     WHISPER_MODE: str = "auto"   # auto / cloud / local
     WHISPER_MODEL: str = "tiny"
