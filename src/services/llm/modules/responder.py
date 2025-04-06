@@ -1,8 +1,5 @@
-# src/services/llm_agent.py
+from services.llm.client import complete
 
-from services.llm import complete
-
-# ✨ บุคลิกหลักของ Baymax 2
 BASE_PERSONALITY_PROMPT = """
 You are Baymax 2, a friendly Thai-speaking soft robot.
 You always respond in polite and natural Thai.

@@ -1,4 +1,3 @@
-
 from config.settings import settings
 from openai import OpenAI
 import tempfile

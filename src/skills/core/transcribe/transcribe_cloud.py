@@ -1,5 +1,5 @@
 
-from services.asr import transcribe_audio
+from services.asr.agent import asr
 
 async def transcribe_cloud(audio_bytes: bytes) -> str:
-    return await transcribe_audio(audio_bytes)
+    return await asr.transcribe(audio_bytes)

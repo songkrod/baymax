@@ -1,7 +1,6 @@
-from skills.core.listen.voice_embedder import extract_embedding
 from agent.memory_access.memory_manager import MemoryManager
 from agent.reasoning.voice_identity import VoiceIdentifier
-from services.asr import transcribe_audio
+from services.asr.agent import asr
 from utils.logger import logger
 
 memory = MemoryManager()
@@ -19,7 +18,7 @@ async def process_audio(audio_bytes: bytes) -> tuple[str, str]:
         logger.info(f"[🧠] ผู้พูด: {user_id}")
 
         # 📝 แปลงเสียงเป็นข้อความ
-        text = await transcribe_audio(audio_bytes)
+        text = await asr.transcribe(audio_bytes)
         text = text.strip()
 
         if not text:
