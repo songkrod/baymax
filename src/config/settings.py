@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     VOICE_EMBEDDINGS_DIR: str = "data/voices/embeddings"
     VOICE_SAMPLES_DIR: str = "data/voices/samples"
     VECTOR_STORE_PATH: str = "data/vector_store"
+    SKILLS_GENERATED_PATH: str = "src/skills/generated"
 
     # AI Providers
     LLM_PROVIDER: str = "openai"

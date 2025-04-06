@@ -2,7 +2,7 @@
 
 from agent.memory_access.memory_manager import MemoryManager
 from agent.reasoning.voice_identity import VoiceIdentifier
-from agent.retrievers.retriever import store_memory, retrieve_context
+from agent.retriever.retriever import store_memory, retrieve_context
 from services.asr.agent import asr
 from services.llm.agent import llm
 from utils.logger import logger

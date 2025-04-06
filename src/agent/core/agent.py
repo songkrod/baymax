@@ -10,8 +10,10 @@ from agent.brain.interpreter import interpret
 from agent.reasoning.name_learning import detect_and_learn_name
 from agent.memory_access.memory_manager import MemoryManager
 from services.llm.agent import llm
+from agent.memory_access.self_knowledge_loader import preload_self_knowledge
 
 memory = MemoryManager()
+preload_self_knowledge()
 
 async def wait_for_wake_word():
     say(f"สวัสดีครับ ผมชื่อ {settings.ROBOT_NAME} เรียกชื่อผมได้เลยถ้าต้องการให้ช่วยนะครับ")
@@ -75,6 +77,7 @@ async def wait_for_command():
 
 async def run():
     logger.info("🤖 กำลังเริ่มการทำงาน...")
+
     wake = False
 
     while True:
