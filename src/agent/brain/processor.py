@@ -1,43 +1,34 @@
-import json
-from typing import Dict, List
-from agent.brain.gpt_agent import gpt_agent
-from skills.core.speech.speaker import say
+from skills.core.listen.voice_embedder import extract_embedding
+from agent.memory_access.memory_manager import MemoryManager
+from agent.reasoning.voice_identity import VoiceIdentifier
+from services.asr import transcribe_audio
 from utils.logger import logger
-from skills.core.listen.recognizer import voice_recognizer
 
-async def process_command(text: str) -> None:
-    """Process voice command.
-    
-    Args:
-        text: Transcribed text from voice
+memory = MemoryManager()
+voice_identifier = VoiceIdentifier()
+
+async def process_audio(audio_bytes: bytes) -> tuple[str, str]:
     """
-    # Process command with voice recognizer
-    response = await voice_recognizer.process_command(text)
-    
-    # Speak response
-    say(response)
-    logger.info(f"[🤖] {response}")
-
-
-async def get_user_conversation_history(user_id: str) -> str:
-    """Get conversation history for a user.
-    
-    Args:
-        user_id: User ID to get history for
-        
-    Returns:
-        Formatted conversation history
+    ประมวลผลเสียง → ข้อความ และ user_id ที่พูด
     """
-    conversations = list_conversations(user_id)
-    if not conversations:
-        return "ไม่พบประวัติการสนทนา"
+    try:
+        logger.info("[🔍] เริ่มประมวลผลเสียง...")
         
-    history = []
-    for conv in conversations:
-        history.append(f"เวลา: {conv['start_time']}")
-        if conv.get('final_intent'):
-            history.append(f"Intent: {conv['final_intent']}")
-        history.append(f"จำนวนข้อความ: {conv['message_count']}")
-        history.append("---")
-        
-    return "\n".join(history)
+        # 🔎 ระบุตัวผู้พูด
+        user_id = voice_identifier.recognize_speaker(audio_bytes)
+        logger.info(f"[🧠] ผู้พูด: {user_id}")
+
+        # 📝 แปลงเสียงเป็นข้อความ
+        text = await transcribe_audio(audio_bytes)
+        text = text.strip()
+
+        if not text:
+            logger.warning("[⚠️] ไม่พบข้อความจากเสียง")
+            return "", user_id
+
+        logger.debug(f"[👂] ผู้ใช้ {user_id} พูดว่า: {text}")
+        return text, user_id
+
+    except Exception as e:
+        logger.error(f"[❌] process_audio error: {e}")
+        return "", "unknown"

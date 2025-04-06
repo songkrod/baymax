@@ -1,7 +1,7 @@
 from pathlib import Path
 import json
 
-def ensure_file(path: str, default_content=None):
+def ensure_file(path: str, default=None):
     """
     Ensures a file exists at the given path.
     If default_content is None, creates an empty file.
@@ -12,8 +12,8 @@ def ensure_file(path: str, default_content=None):
     
     if not fpath.exists():
         with open(fpath, "w", encoding="utf-8") as f:
-            if default_content is not None:
-                json.dump(default_content, f, ensure_ascii=False, indent=2)
+            if default is not None:
+                json.dump(default, f, ensure_ascii=False, indent=2)
             # If default_content is None, just create an empty file
     
     return fpath

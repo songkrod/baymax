@@ -1,56 +1,44 @@
-import os
-import webrtcvad
+
 import sounddevice as sd
+import numpy as np
 import asyncio
 import tempfile
-import numpy as np
-from pydub import AudioSegment
+import soundfile as sf
+from skills.core.listen.vad import is_speech
 from utils.logger import logger
-from config.settings import settings
-from skills.core.transcribe.cloud import transcribe_cloud
-from skills.core.transcribe.local import transcribe_local
-from skills.core.speech.speaker import say
-from utils.hallucination import is_valid_transcript
+from skills.core.transcribe import get_transcriber
 
-VAD_MODE = 3
 SAMPLE_RATE = 16000
+CHANNELS = 1
 FRAME_DURATION_MS = 30
 FRAME_SIZE = int(SAMPLE_RATE * FRAME_DURATION_MS / 1000)
-VAD_SILENCE_DURATION_MS = 300
-MIN_SPEECH_DURATION_MS = 500
+SILENCE_TIMEOUT_MS = 1000
 
-vad = webrtcvad.Vad(VAD_MODE)
-
-async def record_and_transcribe():
-    print("กำลังฟัง...")
+async def record_audio_raw(timeout=7):
+    logger.info("🔴 เริ่มบันทึกเสียง...")
     audio_buffer = []
-    silence_ms = 0
-    total_speech_ms = 0
     triggered = False
+    silence_duration = 0
     recording_done = asyncio.Event()
 
     def callback(indata, frames, time, status):
-        nonlocal triggered, silence_ms, audio_buffer, total_speech_ms
-        if status:
-            logger.warning(f"[⚠️] Stream status: {status}")
-        pcm_data = indata[:, 0].tobytes()
-        is_speech = vad.is_speech(pcm_data, SAMPLE_RATE)
-        audio_buffer.append(pcm_data)
-
-        if is_speech:
+        nonlocal triggered, silence_duration, audio_buffer
+        frame = indata[:, 0].tobytes()
+        if is_speech(frame):
             if not triggered:
-                logger.info("[🎤] ได้ยินเสียงแล้ว บันทึก...")
-                triggered = True
-            silence_ms = 0
-            total_speech_ms += FRAME_DURATION_MS
+                logger.info("🎤 ได้ยินเสียงแล้ว...")
+            triggered = True
+            silence_duration = 0
         elif triggered:
-            silence_ms += FRAME_DURATION_MS
-            if total_speech_ms > MIN_SPEECH_DURATION_MS and silence_ms > VAD_SILENCE_DURATION_MS:
-                recording_done.set()
+            silence_duration += FRAME_DURATION_MS
+        if triggered:
+            audio_buffer.append(indata.copy())
+        if triggered and silence_duration > SILENCE_TIMEOUT_MS:
+            recording_done.set()
 
     stream = sd.InputStream(
-        channels=1,
         samplerate=SAMPLE_RATE,
+        channels=CHANNELS,
         dtype="int16",
         blocksize=FRAME_SIZE,
         callback=callback
@@ -58,57 +46,21 @@ async def record_and_transcribe():
 
     with stream:
         try:
-            await asyncio.wait_for(recording_done.wait(), timeout=7.0)
-            logger.info("[⏹️] เสียงเงียบแล้ว ตัดคำทันที")
+            await asyncio.wait_for(recording_done.wait(), timeout=timeout)
         except asyncio.TimeoutError:
             logger.info("[⏹️] หมดเวลาบันทึก")
-        except Exception as e:
-            logger.error(f"[❌] Recording error: {e}")
-
+    
     if not audio_buffer:
-        logger.warning("[⚠️] ไม่พบเสียงพูด")
+        return None
+
+    audio = np.concatenate(audio_buffer, axis=0)
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+        sf.write(f.name, audio, SAMPLE_RATE)
+        return open(f.name, "rb").read()
+
+async def listen_and_transcribe():
+    audio = await record_audio_raw()
+    if not audio:
         return ""
-
-    audio = b"".join(audio_buffer)
-    audio_array = np.frombuffer(audio, dtype=np.int16)
-
-    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
-        segment = AudioSegment(
-            audio_array.tobytes(),
-            frame_rate=SAMPLE_RATE,
-            sample_width=2,
-            channels=1
-        )
-        segment.export(f.name, format="mp3")
-        fpath = f.name
-
-    with open(settings.LAST_AUDIO_CACHE_PATH, "wb") as out:
-        out.write(segment.export(format="mp3").read())
-
-    result = ""
-    try:
-        if settings.USE_CLOUD_WHISPER:
-            result = await transcribe_cloud(fpath)
-        else:
-            raise Exception("Cloud Whisper ปิด")
-    except Exception as e:
-        logger.error(f"[❌] Cloud Whisper error: {e}")
-        say("ขออภัยครับ Cloud Whisper มีปัญหา ผมจะลองแปลเองนะครับ")
-        result = await asyncio.to_thread(transcribe_local, fpath)
-    finally:
-        try:
-            os.remove(fpath)
-        except:
-            pass
-
-    if not result:
-        return ""
-
-    logger.debug(f"[👂] ได้ยิน: {result}")
-
-    # ตรวจสอบความถูกต้องของข้อความ
-    if not await is_valid_transcript(result):
-        logger.info("[🚫] ตัดข้อความที่ไม่เหมาะสมหรือเป็น noise")
-        return ""
-
-    return result
+    transcriber = get_transcriber()
+    return await transcriber(audio)

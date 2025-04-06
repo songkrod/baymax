@@ -1,20 +1,25 @@
-from config.settings import settings
-from utils.file import ensure_file
+
 import json
+from utils.file import ensure_file
+from config.settings import settings
 
-path = ensure_file(settings.NAME_MEMORY_PATH, [])
+class NameMemory:
+    NAME_MEMORY_PATH = settings.NAME_MEMORY_PATH
+    
+    def __init__(self):
+        ensure_file(self.NAME_MEMORY_PATH, default=[])
 
-def load_name_memory():
-    """โหลดข้อมูลความจำเกี่ยวกับ name memory ที่เคยสร้าง"""
-    return json.load(open(path, encoding="utf-8"))
+    def add_name(self, name: str):
+        with open(self.NAME_MEMORY_PATH, "r") as f:
+            names = json.load(f)
+        if name not in names:
+            names.append(name)
+        with open(self.NAME_MEMORY_PATH, "w") as f:
+            json.dump(names, f, ensure_ascii=False, indent=2)
 
-def save_name_memory(data):
-    """บันทึกข้อมูล name memory ลงไฟล์"""
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    def get_names(self) -> list[str]:
+        with open(self.NAME_MEMORY_PATH, "r") as f:
+            return json.load(f)
 
-def add_name_to_memory(name):
-    """เพิ่มชื่อใหม่เข้าไปใน name memory"""
-    name_memory = load_name_memory()
-    name_memory.append(name.lower())
-    save_name_memory(name_memory)
+    def get_all_names(self) -> list[str]:
+        return self.get_names()
