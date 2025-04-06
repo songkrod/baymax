@@ -1,7 +1,7 @@
-
 from abc import ABC, abstractmethod
 from typing import List
-from .schema import MemoryItem
+from datetime import datetime
+from memory.schema import MemoryItem
 
 class BaseMemory(ABC):
     @abstractmethod

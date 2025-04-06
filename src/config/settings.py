@@ -46,11 +46,13 @@ class Settings(BaseSettings):
     USERS_MEMORY_PATH: str = "data/memories/users"
     VOICE_EMBEDDINGS_DIR: str = "data/voices/embeddings"
     VOICE_SAMPLES_DIR: str = "data/voices/samples"
+    VECTOR_STORE_PATH: str = "data/vector_store"
 
     # AI Providers
     LLM_PROVIDER: str = "openai"
     ASR_PROVIDER: str = "whisper"
     TTS_PROVIDER: str = "google"
+    MEMORY_BACKEND: str = "chroma"
     
     # TTS
     TTS_VOICE_NAME: str = "th-TH-Chirp3-HD-Charon"

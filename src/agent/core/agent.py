@@ -1,3 +1,5 @@
+# src/agent/core/agent.py
+
 from config.settings import settings
 from skills.core.listen.listener import record_audio_raw
 from skills.core.speech.speaker import say
@@ -7,9 +9,9 @@ from agent.brain.processor import process_audio
 from agent.brain.interpreter import interpret
 from agent.reasoning.name_learning import detect_and_learn_name
 from agent.memory_access.memory_manager import MemoryManager
+from services.llm.agent import llm
 
 memory = MemoryManager()
-
 
 async def wait_for_wake_word():
     say(f"สวัสดีครับ ผมชื่อ {settings.ROBOT_NAME} เรียกชื่อผมได้เลยถ้าต้องการให้ช่วยนะครับ")
@@ -50,16 +52,25 @@ async def wait_for_command():
         if not audio:
             continue
 
-        text, user_id = await process_audio(audio)
-        if not text:
+        reply, user_id = await process_audio(audio)
+        if not reply:
             continue
 
-        # วิเคราะห์ intent และเรียนรู้ชื่อเพิ่มเติมได้
-        result = interpret(text, user_id)
-        await detect_and_learn_name(text, user_id)
+        # วิเคราะห์ intent จริง ๆ โดยใช้ GPT
+        intent = llm.classify_intent(reply)
+        logger.info(f"[🎯] Intent ที่ตรวจพบ: {intent}")
 
-        reply = f"คุณพูดว่า '{text}' ใช่ไหมครับ?"  # ยังเป็น placeholder
-        say(reply)
+        # ตัวอย่าง branching ตาม intent
+        if intent == "ask_time":
+            from datetime import datetime
+            now = datetime.now().strftime("%H:%M")
+            say(f"ตอนนี้เวลา {now} นาฬิกาครับ")
+        elif intent == "rest":
+            say("โอเคครับ ผมจะพักนะครับ เรียกผมอีกครั้งเมื่อไหร่ก็ได้นะ")
+            break  # ออกจากโหมดคำสั่ง
+        else:
+            # ตอบกลับทั่วไปจาก GPT
+            say(reply)
 
 
 async def run():
