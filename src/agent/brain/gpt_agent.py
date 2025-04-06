@@ -10,7 +10,6 @@ from config.settings import settings
 from utils.logger import logger
 from agent.memory_access.user_memory import user_memory
 from agent.brain.text_analyzer import text_analyzer
-from agent.memory_access.conversation_memory import list_conversations
 from agent.memory_access.self_knowledge import load_self_knowledge
 
 class GPTAgent:
@@ -107,19 +106,6 @@ class GPTAgent:
                 logger.error(f"Error loading self knowledge: {str(e)}")
                 return ""
                 
-            # Get recent conversations
-            try:
-                recent_conversations = list_conversations(self.current_user_id)
-                recent_intents = []
-                if recent_conversations and isinstance(recent_conversations, list):
-                    # Get last 3 conversations
-                    for conv in recent_conversations[-3:]:
-                        if isinstance(conv, dict) and 'final_intent' in conv and conv['final_intent']:
-                            recent_intents.append(conv['final_intent'])
-            except Exception as e:
-                logger.error(f"Error getting recent conversations: {str(e)}")
-                recent_intents = []
-                
             # Get user's name information safely
             basic_info = user_context.get("basic_info", {})
             name_prefs = user_context.get("name_preferences", {})
@@ -141,11 +127,7 @@ class GPTAgent:
             likes = preferences.get("likes", [])
             dislikes = preferences.get("dislikes", [])
             
-            # Add recent conversation context
-            conversation_context = ""
-            if recent_intents:
-                conversation_context = "\nการสนทนาล่าสุด:\n" + "\n".join([f"- {intent}" for intent in recent_intents])
-                
+            
             # Get identity info safely
             identity = knowledge.get("identity", {})
             structure = knowledge.get("structure", {})
@@ -222,9 +204,7 @@ class GPTAgent:
 "ยินดีด้วยนะคะ {display_name}! Baymax ดีใจและภูมิใจในตัว{display_name}มากๆ เลย ขอให้มีเรื่องดีๆ แบบนี้เข้ามาอีกเยอะๆ นะคะ"
 
 5. เมื่อผู้ใช้รู้สึกเหงาหรือต้องการกำลังใจ:
-"{display_name}ไม่ได้อยู่คนเดียวนะคะ Baymax อยู่ตรงนี้เสมอ พร้อมจะรับฟังและให้กำลังใจ{display_name}ตลอดเวลา"
-
-{conversation_context}
+"{display_name}ไม่ได้อยู่คนเดียวนะครับ Baymax อยู่ตรงนี้เสมอ พร้อมจะรับฟังและให้กำลังใจ{display_name}ตลอดเวลา"
 """
             return prompt
             

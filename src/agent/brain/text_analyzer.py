@@ -13,7 +13,6 @@ from utils.logger import logger
 from rapidfuzz import fuzz, process
 from skills.core.speech.speaker import say
 from skills.core.listen.listener import record_and_transcribe
-from agent.memory_access.conversation_memory import add_conversation, list_conversations
 from datetime import datetime
 
 class TextAnalyzer:
@@ -140,35 +139,11 @@ class TextAnalyzer:
             return
             
         try:
-            # Get recent conversations for context
-            recent_conversations = list_conversations(user_id) or []
-            recent_messages = []
-            
-            if recent_conversations and len(recent_conversations) > 0:
-                # Get messages from last conversation
-                last_conv = recent_conversations[-1]
-                if last_conv and isinstance(last_conv, dict):
-                    recent_messages = last_conv.get("messages", [])
-            
             # Add current messages
             messages = [
                 {"role": "user", "content": user_message, "timestamp": datetime.now().isoformat()},
                 {"role": "assistant", "content": assistant_message, "timestamp": datetime.now().isoformat()}
             ]
-            
-            # Store conversation with context
-            final_intent = None
-            try:
-                if len(recent_messages) > 0:
-                    # If we have previous messages, analyze the full context
-                    all_messages = recent_messages + messages
-                    final_intent = await self.analyze_intent(all_messages)
-            except Exception as e:
-                logger.error(f"Error analyzing intent: {str(e)}")
-                final_intent = None
-            
-            # Add conversation first to avoid delay
-            add_conversation(messages, user_id, final_intent)
             
             # Analyze conversation with GPT
             analysis_prompt = f"""วิเคราะห์บทสนทนาต่อไปนี้และสรุปข้อมูลสำคัญเกี่ยวกับผู้ใช้และบุคคลที่ถูกกล่าวถึง:

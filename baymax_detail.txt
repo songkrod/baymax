@@ -1,0 +1,133 @@
+# Baymax Mini - Detailed Project Documentation
+
+## Project Overview
+Baymax Mini เป็นผู้ช่วยอัจฉริยะที่สามารถโต้ตอบด้วยเสียงภาษาไทย โดยมีความสามารถในการจดจำเสียง เรียนรู้บริบทการสนทนา และปรับตัวตามผู้ใช้แต่ละคน
+
+## Core Capabilities
+
+### 1. การรู้จำเสียงพูด (Speech Recognition)
+- ใช้ Whisper ในการแปลงเสียงพูดเป็นข้อความ
+- รองรับทั้งแบบ local (faster-whisper) และ cloud (OpenAI Whisper API)
+- มีระบบ cache เพื่อเพิ่มประสิทธิภาพ
+- ตรวจจับการหยุดพูดอัตโนมัติด้วย WebRTC VAD
+
+### 2. การพูดตอบโต้ (Text-to-Speech)
+- ใช้ Google Cloud TTS สำหรับการพูดภาษาไทยที่เป็นธรรมชาติ
+- รองรับการแบ่งข้อความยาวเป็นชิ้นเล็กๆ (< 200 ตัวอักษร)
+- แบ่งประโยคอย่างชาญฉลาดตามเครื่องหมายวรรคตอน
+- รองรับ fallback ไปใช้ system TTS เมื่อจำเป็น
+
+### 3. การจดจำผู้ใช้ (User Recognition)
+- ใช้ Resemblyzer สำหรับสร้าง voice embeddings
+- จดจำและแยกแยะผู้ใช้จากเสียงพูด
+- เก็บตัวอย่างเสียงหลายๆ ชิ้นต่อผู้ใช้
+- ปรับปรุงโมเดลอัตโนมัติเมื่อได้ตัวอย่างเสียงใหม่
+
+### 4. การเข้าใจบริบท (Context Understanding)
+- วิเคราะห์ intent ของบทสนทนา
+- จดจำและอ้างอิงข้อมูลจากบทสนทนาก่อนหน้า
+- เก็บข้อมูลความชอบและความสัมพันธ์ของผู้ใช้
+- ปรับการตอบสนองตามบริบทและประวัติการสนทนา
+
+### 5. การโต้ตอบอัจฉริยะ (Intelligent Response)
+- ใช้ GPT-4/3.5 ในการวิเคราะห์และสร้างการตอบสนอง
+- ปรับแต่ง prompt ตามบริบทและข้อมูลผู้ใช้
+- รองรับการถามต่อเนื่องและการอ้างอิงข้อมูลเก่า
+- มีกลไกป้องกันการตอบสนองที่ไม่เหมาะสม
+
+## File Structure & Purposes
+
+### /src/agent/
+#### brain/
+- `gpt_agent.py`: จัดการการโต้ตอบด้วย GPT, สร้าง prompt, และจัดการ conversation history
+- `text_analyzer.py`: วิเคราะห์ข้อความ, สกัด intent, และตรวจจับการอ้างอิง
+- `detector.py`: ตรวจจับ wake word และวิเคราะห์คำสั่งพื้นฐาน
+- `processor.py`: ประมวลผลคำสั่งและจัดการ workflow หลัก
+
+#### memory_access/
+- `user_memory.py`: จัดการข้อมูลผู้ใช้ (ความชอบ, ประวัติ, การตั้งค่า)
+- `conversation_memory.py`: เก็บและเรียกใช้ประวัติการสนทนา
+- `name_memory.py`: จัดการรายการชื่อที่ใช้เรียก Baymax
+- `self_knowledge.py`: จัดการข้อมูลพื้นฐานของ Baymax
+
+### /src/skills/
+#### core/speech/
+- `speaker.py`: จัดการการพูดผ่าน TTS, แบ่งข้อความ, และควบคุมเสียง
+- `hardware/speaker.py`: ควบคุมการเล่นเสียงผ่านฮาร์ดแวร์
+
+#### core/listen/
+- `listener.py`: จัดการการรับเสียงและตรวจจับการหยุดพูด
+- `recognizer.py`: จดจำเสียงผู้ใช้และแปลงเสียงเป็นข้อความ
+
+#### core/transcribe/
+- `cloud.py`: แปลงเสียงเป็นข้อความด้วย OpenAI Whisper API
+- `local.py`: แปลงเสียงเป็นข้อความด้วย faster-whisper แบบ local
+
+### /src/config/
+- `settings.py`: การตั้งค่าระบบทั้งหมด
+- `instances.py`: สร้าง global instances ของ clients ต่างๆ
+
+### /src/utils/
+- `logger.py`: จัดการ logging และการแสดงผล
+- `hallucination.py`: ตรวจจับและป้องกันการตอบสนองที่ไม่เหมาะสม
+
+## Data Structure
+
+### 1. User Memory
+```json
+{
+    "user_id": {
+        "basic_info": {
+            "name": "string",
+            "voice_samples": ["path/to/sample1.wav", "path/to/sample2.wav"],
+            "first_seen": "timestamp",
+            "last_seen": "timestamp"
+        },
+        "preferences": {
+            "likes": ["item1", "item2"],
+            "dislikes": ["item3"]
+        },
+        "relationships": {
+            "person1": "relation_type"
+        }
+    }
+}
+```
+
+### 2. Conversation Memory
+```json
+{
+    "conversation_id": {
+        "timestamp": "datetime",
+        "user_id": "string",
+        "messages": [
+            {
+                "role": "user/assistant",
+                "content": "string",
+                "timestamp": "datetime"
+            }
+        ],
+        "final_intent": "string",
+        "references": ["reference1", "reference2"]
+    }
+}
+```
+
+## Development Guidelines
+
+### 1. เพิ่มความสามารถใหม่
+- สร้างโมดูลใน `src/skills/`
+- ลงทะเบียนใน `config/settings.py`
+- เพิ่มการทดสอบใน `tests/`
+- อัพเดท documentation
+
+### 2. ปรับแต่งการตอบสนอง
+- แก้ไข prompts ใน `agent/brain/`
+- ปรับปรุงการวิเคราะห์ใน `text_analyzer.py`
+- ปรับแต่งการพูดใน `speaker.py`
+
+### 3. การจัดการข้อมูล
+- ใช้ type hints ทุกที่ที่เป็นไปได้
+- จัดการ exceptions อย่างเหมาะสม
+- บันทึก logs ที่จำเป็น
+- รักษาความปลอดภัยของข้อมูลผู้ใช้
