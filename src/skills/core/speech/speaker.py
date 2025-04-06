@@ -1,12 +1,53 @@
 import os
 import platform
 import tempfile
+from typing import List
 from config.settings import settings
 from utils.logger import logger
 from google.cloud import texttospeech
 from hardware.speaker import play_sound
 
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = settings.GOOGLE_APPLICATION_CREDENTIALS
+
+def split_long_text(text: str, max_length: int = 200) -> List[str]:
+    """Split long text into smaller chunks for TTS.
+    
+    Args:
+        text: Text to split
+        max_length: Maximum length per chunk
+        
+    Returns:
+        List of text chunks
+    """
+    if len(text) <= max_length:
+        return [text]
+        
+    chunks = []
+    current = ""
+    
+    # Split by sentence endings
+    sentences = text.replace(". ", ".|").replace("! ", "!|").replace("? ", "?|").split("|")
+    
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+            
+        # If current chunk + new sentence is too long, start new chunk
+        if len(current) + len(sentence) > max_length:
+            if current:
+                chunks.append(current.strip())
+            current = sentence
+        else:
+            if current:
+                current += " "
+            current += sentence
+            
+    # Add remaining text
+    if current:
+        chunks.append(current.strip())
+        
+    return chunks
 
 def get_available_thai_voices():
     """รับรายการ voices ภาษาไทยที่มีอยู่จริง"""
@@ -32,9 +73,22 @@ def list_available_voices():
     except Exception as e:
         logger.error(f"[❌] Failed to list voices: {e}")
 
-def speak_google(text, lang="th-TH", voice=settings.TTS_VOICE_NAME):
+def speak_google(text: str, lang: str = "th-TH", voice: str = settings.TTS_VOICE_NAME):
+    """Speak text using Google Cloud TTS.
+    
+    Args:
+        text: Text to speak
+        lang: Language code
+        voice: Voice name
+    """
     logger.info("🔊 กำลังพูดด้วย Google TTS")
+    
     try:
+        # Split text into chunks if too long
+        chunks = split_long_text(text)
+        if len(chunks) > 1:
+            logger.debug(f"Split text into {len(chunks)} chunks")
+            
         client = texttospeech.TextToSpeechClient()
         thai_voices = get_available_thai_voices()
         
@@ -50,7 +104,6 @@ def speak_google(text, lang="th-TH", voice=settings.TTS_VOICE_NAME):
             if voice not in voice_names:
                 voice = voice_names[0]
 
-        synthesis_input = texttospeech.SynthesisInput(text=text)
         voice_params = texttospeech.VoiceSelectionParams(
             language_code=lang,
             name=voice,
@@ -61,21 +114,31 @@ def speak_google(text, lang="th-TH", voice=settings.TTS_VOICE_NAME):
             audio_encoding=texttospeech.AudioEncoding.MP3
         )
 
-        response = client.synthesize_speech(
-            input=synthesis_input,
-            voice=voice_params,
-            audio_config=audio_config
-        )
+        # Process each chunk
+        for chunk in chunks:
+            try:
+                synthesis_input = texttospeech.SynthesisInput(text=chunk)
+                response = client.synthesize_speech(
+                    input=synthesis_input,
+                    voice=voice_params,
+                    audio_config=audio_config
+                )
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as out:
-            out.write(response.audio_content)
-            out.flush()
-            play_sound(out.name)
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as out:
+                    out.write(response.audio_content)
+                    out.flush()
+                    play_sound(out.name)
+                    
+            except Exception as e:
+                logger.error(f"[❌] Failed to speak chunk: {e}")
+                continue
+                
     except Exception as e:
         logger.error(f"[❌] Failed to synthesize speech: {e}")
         raise
 
-def speak_system(text):
+def speak_system(text: str):
+    """Speak text using system TTS."""
     system = platform.system()
     if system == "Darwin":
         os.system(f'say -v "Kanya" "{text}"')  # หรือ "Lek"
@@ -85,6 +148,11 @@ def speak_system(text):
         logger.warning("⚠️ ยังไม่รองรับ TTS บนระบบนี้")
 
 def say(text: str):
+    """Main function to speak text.
+    
+    Args:
+        text: Text to speak
+    """
     logger.debug(f"[🗣️ baymax ตอบ]: {text}")
     print(f"[🗣️ baymax ตอบ]: {text}")
 

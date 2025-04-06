@@ -114,7 +114,7 @@ class GPTAgent:
                 if recent_conversations and isinstance(recent_conversations, list):
                     # Get last 3 conversations
                     for conv in recent_conversations[-3:]:
-                        if isinstance(conv, dict) and conv.get('final_intent'):
+                        if isinstance(conv, dict) and 'final_intent' in conv and conv['final_intent']:
                             recent_intents.append(conv['final_intent'])
             except Exception as e:
                 logger.error(f"Error getting recent conversations: {str(e)}")
@@ -255,7 +255,8 @@ class GPTAgent:
             system_msg = f"""คุณคือ Baymax ผู้ช่วยส่วนตัวที่เป็นมิตรและใส่ใจ
 กำลังคุยกับคุณ{user_name}
 พยายามตอบให้เป็นธรรมชาติและเป็นกันเอง
-ใช้ภาษาที่สุภาพแต่ไม่เป็นทางการเกินไป"""
+ใช้ภาษาที่สุภาพแต่ไม่เป็นทางการเกินไป
+ตอบสั้นๆ กระชับ ไม่เกิน 2-3 ประโยค ยกเว้นกรณีที่จำเป็นต้องอธิบายยาว"""
 
             # Add conversation history
             messages = [{
